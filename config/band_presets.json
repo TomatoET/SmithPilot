@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "bands": [
+    {
+      "name": "WCDMA B1 TX",
+      "unit": "MHz",
+      "start": 1920,
+      "stop": 1980,
+      "points": 1601,
+      "markers": [1920, 1950, 1980]
+    },
+    {
+      "name": "WCDMA B2 TX",
+      "unit": "MHz",
+      "start": 1850,
+      "stop": 1910,
+      "points": 1601,
+      "markers": [1850, 1880, 1910]
+    },
+    {
+      "name": "WCDMA B5 TX",
+      "unit": "MHz",
+      "start": 824,
+      "stop": 849,
+      "points": 1601,
+      "markers": [824, 836.5, 849]
+    },
+    {
+      "name": "WCDMA B8 TX",
+      "unit": "MHz",
+      "start": 880,
+      "stop": 915,
+      "points": 1601,
+      "markers": [880, 897.5, 915]
+    },
+    {
+      "name": "LTE B1 TX",
+      "unit": "MHz",
+      "start": 1920,
+      "stop": 1980,
+      "points": 1601,
+      "markers": [1920, 1950, 1980]
+    },
+    {
+      "name": "LTE B38 TX",
+      "unit": "MHz",
+      "start": 2570,
+      "stop": 2620,
+      "points": 1601,
+      "markers": [2570, 2595, 2620]
+    },
+    {
+      "name": "LTE B40 TX",
+      "unit": "MHz",
+      "start": 2300,
+      "stop": 2400,
+      "points": 1601,
+      "markers": [2300, 2350, 2400]
+    }
+  ]
+}

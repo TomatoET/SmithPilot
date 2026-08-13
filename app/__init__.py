@@ -1,0 +1,1 @@
+"""SmithPilot desktop application package."""
