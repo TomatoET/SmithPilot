@@ -1,6 +1,6 @@
 # SmithPilot
 
-SmithPilot V0.2 is a Windows desktop application for semi-automatic
+SmithPilot V0.3 is a Windows desktop application for semi-automatic
 Agilent/Keysight E5071C vector network analyzer workflows. It keeps the V0.1
 LAN/SCPI validation tools and adds the VNA workflow from the supplied Vanchip
 usage PDF:
@@ -13,6 +13,9 @@ usage PDF:
 - Auto Port Extension setup, measurement, and readback
 - DUT measurement checklist and S11/S22/S21 marker readback
 - Basic result judgement for mismatch and insertion loss
+
+V0.3 packages the desktop tool with the final SmithPilot application/window
+icons and Windows executable build assets.
 
 V0.2 remains semi-automatic by design. It does not physically connect
 standards, solder fixtures, control the external platform tool, enable PA
@@ -33,6 +36,9 @@ SmithPilot/
 |-- main.py
 |-- requirements.txt
 |-- README.md
+|-- assets/
+|   |-- app_icons/
+|   `-- menu_icons/
 |-- config/
 |   `-- band_presets.json
 |-- docs/
@@ -77,6 +83,21 @@ python main.py
 ```
 
 The application starts disconnected. It will not auto-connect to the instrument.
+
+## Windows Package
+
+V0.3 is packaged with PyInstaller as a one-folder Windows build. The release
+artifact contains:
+
+- `SmithPilot.exe`
+- bundled Python/PySide6/PyVISA runtime dependencies
+- final application and window icon assets
+
+Build command used for the V0.3 package:
+
+```powershell
+pyinstaller --noconfirm --clean --windowed --name SmithPilot --icon assets\app_icons\app-icon.ico --add-data "assets;assets" --collect-all pyvisa --collect-all pyvisa_py main.py
+```
 
 ## E5071C LAN Connection
 

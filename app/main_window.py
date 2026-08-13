@@ -78,7 +78,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self, settings: QSettings | None = None) -> None:
         super().__init__()
-        self.setWindowTitle("SmithPilot V0.2 - E5071C VNA Workflow")
+        self.setWindowTitle("SmithPilot V0.3 - E5071C VNA Workflow")
         self.settings = settings or QSettings()
         self.driver: E5071C | None = None
         self.worker: InstrumentWorker | None = None
@@ -110,7 +110,7 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(14, 14, 14, 14)
         main_layout.setSpacing(10)
 
-        title = QLabel("SmithPilot V0.2\nE5071C VNA Workflow")
+        title = QLabel("SmithPilot V0.3\nE5071C VNA Workflow")
         title.setObjectName("titleLabel")
         title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         main_layout.addWidget(title)

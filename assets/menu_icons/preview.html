@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SmithPilot Menu Icon Options</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --border: #d8e0ea;
+      --text: #1f2937;
+      --muted: #6b7280;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", Arial, sans-serif;
+    }
+
+    main {
+      max-width: 1020px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    h1 {
+      margin: 0 0 18px;
+      font-size: 22px;
+      font-weight: 650;
+    }
+
+    section {
+      margin: 0 0 18px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    h2 {
+      margin: 0 0 4px;
+      font-size: 16px;
+      font-weight: 650;
+    }
+
+    p {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(108px, 1fr));
+      gap: 12px;
+    }
+
+    .tile {
+      min-height: 86px;
+      display: grid;
+      place-items: center;
+      gap: 8px;
+      padding: 12px 8px;
+      border: 1px solid #e4e9f0;
+      border-radius: 6px;
+      background: #fbfcfe;
+      text-align: center;
+    }
+
+    img {
+      width: 32px;
+      height: 32px;
+      display: block;
+    }
+
+    .label {
+      color: #374151;
+      font-size: 12px;
+      line-height: 1.25;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SmithPilot menu icon options</h1>
+
+    <section>
+      <h2>Option A: Line Precision</h2>
+      <p>Thin monoline icons, closest to the current quiet Windows desktop style.</p>
+      <div class="grid">
+        <div class="tile"><img src="set_a_line/connection.svg" alt=""><div class="label">Connection</div></div>
+        <div class="tile"><img src="set_a_line/setup.svg" alt=""><div class="label">V0.2 Setup</div></div>
+        <div class="tile"><img src="set_a_line/calibration.svg" alt=""><div class="label">Calibration</div></div>
+        <div class="tile"><img src="set_a_line/port-extension.svg" alt=""><div class="label">Port Extension</div></div>
+        <div class="tile"><img src="set_a_line/dut-measurement.svg" alt=""><div class="label">DUT Measurement</div></div>
+        <div class="tile"><img src="set_a_line/log.svg" alt=""><div class="label">Log</div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Option B: Solid Compact</h2>
+      <p>Filled glyphs with one blue accent, stronger at small menu sizes.</p>
+      <div class="grid">
+        <div class="tile"><img src="set_b_solid/connection.svg" alt=""><div class="label">Connection</div></div>
+        <div class="tile"><img src="set_b_solid/setup.svg" alt=""><div class="label">V0.2 Setup</div></div>
+        <div class="tile"><img src="set_b_solid/calibration.svg" alt=""><div class="label">Calibration</div></div>
+        <div class="tile"><img src="set_b_solid/port-extension.svg" alt=""><div class="label">Port Extension</div></div>
+        <div class="tile"><img src="set_b_solid/dut-measurement.svg" alt=""><div class="label">DUT Measurement</div></div>
+        <div class="tile"><img src="set_b_solid/log.svg" alt=""><div class="label">Log</div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Option C: Panel Technical</h2>
+      <p>Each icon sits inside a small instrument-panel frame, more branded and technical.</p>
+      <div class="grid">
+        <div class="tile"><img src="set_c_panel/connection.svg" alt=""><div class="label">Connection</div></div>
+        <div class="tile"><img src="set_c_panel/setup.svg" alt=""><div class="label">V0.2 Setup</div></div>
+        <div class="tile"><img src="set_c_panel/calibration.svg" alt=""><div class="label">Calibration</div></div>
+        <div class="tile"><img src="set_c_panel/port-extension.svg" alt=""><div class="label">Port Extension</div></div>
+        <div class="tile"><img src="set_c_panel/dut-measurement.svg" alt=""><div class="label">DUT Measurement</div></div>
+        <div class="tile"><img src="set_c_panel/log.svg" alt=""><div class="label">Log</div></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

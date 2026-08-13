@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1020" height="430" viewBox="0 0 1020 430" role="img" aria-label="SmithPilot menu icon options">
+  <rect width="1020" height="430" fill="#f6f8fb"/>
+  <text x="32" y="44" fill="#1f2937" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="650">SmithPilot menu icon options</text>
+
+  <g transform="translate(32 72)">
+    <rect width="956" height="96" rx="8" fill="#ffffff" stroke="#d8e0ea"/>
+    <text x="18" y="28" fill="#1f2937" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="650">Option A: Line Precision</text>
+    <text x="18" y="50" fill="#6b7280" font-family="Segoe UI, Arial, sans-serif" font-size="13">Thin monoline icons, closest to the current quiet Windows desktop style.</text>
+    <g transform="translate(348 20)">
+      <g transform="translate(0 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_a_line/connection.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">Connect</text></g>
+      <g transform="translate(96 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_a_line/setup.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">Setup</text></g>
+      <g transform="translate(192 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_a_line/calibration.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">Cal</text></g>
+      <g transform="translate(288 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_a_line/port-extension.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">Extension</text></g>
+      <g transform="translate(384 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_a_line/dut-measurement.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">DUT</text></g>
+      <g transform="translate(480 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_a_line/log.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">Log</text></g>
+    </g>
+  </g>
+
+  <g transform="translate(32 188)">
+    <rect width="956" height="96" rx="8" fill="#ffffff" stroke="#d8e0ea"/>
+    <text x="18" y="28" fill="#1f2937" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="650">Option B: Solid Compact</text>
+    <text x="18" y="50" fill="#6b7280" font-family="Segoe UI, Arial, sans-serif" font-size="13">Filled glyphs with one blue accent, stronger at small menu sizes.</text>
+    <g transform="translate(348 20)">
+      <g transform="translate(0 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_b_solid/connection.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">Connect</text></g>
+      <g transform="translate(96 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_b_solid/setup.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">Setup</text></g>
+      <g transform="translate(192 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_b_solid/calibration.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">Cal</text></g>
+      <g transform="translate(288 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_b_solid/port-extension.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">Extension</text></g>
+      <g transform="translate(384 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_b_solid/dut-measurement.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">DUT</text></g>
+      <g transform="translate(480 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_b_solid/log.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">Log</text></g>
+    </g>
+  </g>
+
+  <g transform="translate(32 304)">
+    <rect width="956" height="96" rx="8" fill="#ffffff" stroke="#d8e0ea"/>
+    <text x="18" y="28" fill="#1f2937" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="650">Option C: Panel Technical</text>
+    <text x="18" y="50" fill="#6b7280" font-family="Segoe UI, Arial, sans-serif" font-size="13">Each icon sits inside a small instrument-panel frame, more branded and technical.</text>
+    <g transform="translate(348 20)">
+      <g transform="translate(0 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_c_panel/connection.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">Connect</text></g>
+      <g transform="translate(96 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_c_panel/setup.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">Setup</text></g>
+      <g transform="translate(192 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_c_panel/calibration.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">Cal</text></g>
+      <g transform="translate(288 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_c_panel/port-extension.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">Extension</text></g>
+      <g transform="translate(384 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_c_panel/dut-measurement.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">DUT</text></g>
+      <g transform="translate(480 0)"><rect width="84" height="58" rx="6" fill="#fbfcfe" stroke="#e4e9f0"/><image href="set_c_panel/log.svg" x="26" y="8" width="32" height="32"/><text x="42" y="50" text-anchor="middle" fill="#374151" font-family="Segoe UI, Arial, sans-serif" font-size="11">Log</text></g>
+    </g>
+  </g>
+</svg>
