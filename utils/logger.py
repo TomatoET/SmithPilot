@@ -11,7 +11,7 @@ class LogEntry:
     message: str
 
     @classmethod
-    def now(cls, kind: str, message: str) -> "LogEntry":
+    def now(cls, kind: str, message: str) -> LogEntry:
         return cls(timestamp=datetime.now(), kind=kind, message=message)
 
 

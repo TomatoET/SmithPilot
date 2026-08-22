@@ -16,6 +16,7 @@ build/
 dist/
 *.egg-info/
 *.spec
+!SmithPilot.spec
 
 # Local generated files
 tmp/
@@ -28,3 +29,10 @@ smithpilot_log_*.txt
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Local environment and coverage output
+.env
+.env.*
+.coverage
+coverage.xml
+htmlcov/

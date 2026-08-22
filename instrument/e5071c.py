@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import csv
 import re
+from collections.abc import Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import PureWindowsPath
-from collections.abc import Sequence
 from typing import Any
 
 from instrument.base_vna import (
@@ -16,6 +18,8 @@ from instrument.base_vna import (
     InstrumentTimeoutError,
     LogCallback,
 )
+
+DEFAULT_TIMEOUT_MS = 10000
 
 
 @dataclass(frozen=True)
@@ -96,7 +100,7 @@ class E5071C(BaseVNA):
         self,
         ip_address: str = "",
         resource: str | None = None,
-        timeout_ms: int = 5000,
+        timeout_ms: int = DEFAULT_TIMEOUT_MS,
         mock: bool = False,
         log_callback: LogCallback | None = None,
     ) -> None:
@@ -124,9 +128,16 @@ class E5071C(BaseVNA):
         self._mock_auto_port_extension_ports: set[int] = set()
         self._mock_trace_measurements: dict[int, str] = {1: "S11", 2: "S22", 3: "S21"}
         self._mock_markers: dict[tuple[int, int], float] = {}
+        self._mock_screen_capture_format = "PNG"
+        self._mock_vna_directories = {"d:"}
 
     @staticmethod
     def build_resource(ip_address: str) -> str:
+        ip = ip_address.strip() or "<IP>"
+        return f"TCPIP0::{ip}::5025::SOCKET"
+
+    @staticmethod
+    def build_vxi11_resource(ip_address: str) -> str:
         ip = ip_address.strip() or "<IP>"
         return f"TCPIP0::{ip}::inst0::INSTR"
 
@@ -162,29 +173,19 @@ class E5071C(BaseVNA):
                 "PyVISA is not installed. Run: pip install -r requirements.txt"
             ) from exc
 
-        try:
-            self._resource_manager = pyvisa.ResourceManager("@py")
-            self._session = self._resource_manager.open_resource(self.resource)
-            self._session.timeout = self.timeout_ms
-            self._configure_session_terminations()
-            self._connected = True
-            self._emit("Connection", "VISA resource opened")
+        failures: list[tuple[str, InstrumentError]] = []
+        original_resource = self.resource
+        for resource in self._connection_resource_candidates():
+            try:
+                return self._connect_resource(pyvisa, resource)
+            except InstrumentError as exc:
+                failures.append((resource, exc))
+                self._emit("Error", f"{resource}: {exc}")
+                self._close_session()
+                self._connected = False
 
-            idn = self.query_idn()
-            self.identity = InstrumentIdentity.from_idn(idn)
-            self.last_system_error = self.query_error()
-            if not self.system_error_is_clear(self.last_system_error):
-                self._emit("Error", f"SYST:ERR returned {self.last_system_error}")
-            self._emit("Connection", "Instrument connected successfully")
-            return self.identity
-        except InstrumentError:
-            self._close_session()
-            self._connected = False
-            raise
-        except Exception as exc:
-            self._close_session()
-            self._connected = False
-            raise self._map_exception(exc, opening=True) from exc
+        self.resource = original_resource
+        raise InstrumentConnectionError(self._format_connection_failures(failures))
 
     def disconnect(self) -> None:
         self._close_session()
@@ -342,6 +343,69 @@ class E5071C(BaseVNA):
                 )
         return results
 
+    def display_traces_data_and_memory(
+        self,
+        traces: Sequence[int] = (1, 2, 3),
+        channel: int = 1,
+    ) -> None:
+        self._ensure_channel(channel)
+        trace_numbers = self._ensure_traces(traces)
+        for trace in trace_numbers:
+            self._control_write(f":DISP:WIND{channel}:TRAC{trace}:STAT ON")
+            self._control_write(f":DISP:WIND{channel}:TRAC{trace}:MEM ON")
+        self._raise_if_system_error()
+
+    def copy_traces_data_to_memory(
+        self,
+        traces: Sequence[int] = (1, 2, 3),
+        channel: int = 1,
+    ) -> None:
+        self._ensure_channel(channel)
+        trace_numbers = self._ensure_traces(traces)
+        for trace in trace_numbers:
+            self._control_write(f":CALC{channel}:PAR{trace}:SEL")
+            self._control_write(f":CALC{channel}:MATH:MEM")
+        self._raise_if_system_error()
+
+    def capture_screen_image(
+        self,
+        image_format: str = "PNG",
+        vna_path: str | None = None,
+        keep_vna_copy: bool = False,
+    ) -> bytes:
+        image_format = self._safe_image_format(image_format)
+        image_path = self._safe_vna_image_path(
+            vna_path or self._temporary_vna_image_path(image_format)
+        )
+        self.save_screen_image_on_vna(image_path)
+        image = self.transfer_file_from_vna(image_path)
+        if not keep_vna_copy:
+            self._delete_vna_file_best_effort(image_path)
+        return image
+
+    def save_screen_image_on_vna(self, vna_path: str) -> None:
+        image_path = self._safe_vna_image_path(vna_path)
+        self._ensure_vna_parent_directory(image_path)
+        self._control_write(f':MMEM:STOR:IMAG "{image_path}"')
+        self._wait_for_operation_complete()
+        self._raise_if_system_error()
+
+    def transfer_file_from_vna(self, vna_path: str) -> bytes:
+        self._ensure_connected()
+        image_path = self._safe_vna_image_path(vna_path)
+        return self._query_binary_block(f':MMEM:TRAN? "{image_path}"')
+
+    def delete_vna_file(self, vna_path: str) -> None:
+        image_path = self._safe_vna_image_path(vna_path)
+        self._control_write(f':MMEM:DEL "{image_path}"')
+        self._raise_if_system_error()
+
+    def _delete_vna_file_best_effort(self, vna_path: str) -> None:
+        try:
+            self.delete_vna_file(vna_path)
+        except InstrumentError as exc:
+            self._emit("Error", f"Temporary VNA image cleanup failed: {exc}")
+
     def start_two_port_solt_calibration(
         self,
         cal_kit: str = "85032F",
@@ -396,9 +460,7 @@ class E5071C(BaseVNA):
 
     def set_ecal_auto_orientation(self, enabled: bool, channel: int = 1) -> None:
         self._ensure_channel(channel)
-        self._control_write(
-            f":SENS{channel}:CORR:COLL:ECAL:ORI {self._bool_word(enabled)}"
-        )
+        self._control_write(f":SENS{channel}:CORR:COLL:ECAL:ORI {self._bool_word(enabled)}")
         self._raise_if_system_error()
 
     def perform_two_port_ecal(
@@ -450,12 +512,8 @@ class E5071C(BaseVNA):
         self._control_write(f":SENS{channel}:CORR:EXT ON")
         self._control_write(f":SENS{channel}:CORR:EXT:AUTO:CONF {method}")
         self._select_auto_port_extension_ports(selected_ports, channel)
-        self._control_write(
-            f":SENS{channel}:CORR:EXT:AUTO:LOSS {self._bool_word(include_loss)}"
-        )
-        self._control_write(
-            f":SENS{channel}:CORR:EXT:AUTO:DCOF {self._bool_word(adjust_mismatch)}"
-        )
+        self._control_write(f":SENS{channel}:CORR:EXT:AUTO:LOSS {self._bool_word(include_loss)}")
+        self._control_write(f":SENS{channel}:CORR:EXT:AUTO:DCOF {self._bool_word(adjust_mismatch)}")
         self._raise_if_system_error()
 
     def measure_auto_port_extension(
@@ -504,7 +562,9 @@ class E5071C(BaseVNA):
         self, ports: Sequence[int], channel: int = 1
     ) -> list[PortExtensionResult]:
         selected_ports = self._ensure_auto_port_extension_ports(ports)
-        return [self.get_port_extension_result(port=port, channel=channel) for port in selected_ports]
+        return [
+            self.get_port_extension_result(port=port, channel=channel) for port in selected_ports
+        ]
 
     def save_state(self, name: str, save_type: str = "CDST") -> None:
         state_path = self._safe_state_path(name)
@@ -530,20 +590,74 @@ class E5071C(BaseVNA):
         if self._session is None:
             return
         for attr in ("write_termination", "read_termination"):
-            try:
+            with suppress(Exception):
                 setattr(self._session, attr, "\n")
-            except Exception:
-                pass
+
+    def _connection_resource_candidates(self) -> tuple[str, ...]:
+        candidates: list[str] = []
+        for resource in (
+            self.resource,
+            self.build_resource(self.ip_address),
+            self.build_vxi11_resource(self.ip_address),
+        ):
+            resource = resource.strip()
+            if resource and resource not in candidates:
+                candidates.append(resource)
+        return tuple(candidates)
+
+    def _connect_resource(self, pyvisa_module: Any, resource: str) -> InstrumentIdentity:
+        self.resource = resource
+        self._emit("Connection", f"Opening VISA resource: {resource}")
+        try:
+            self._resource_manager = pyvisa_module.ResourceManager("@py")
+            self._session = self._resource_manager.open_resource(resource)
+            self._session.timeout = self.timeout_ms
+            self._configure_session_terminations()
+            self._connected = True
+            self._emit("Connection", "VISA resource opened")
+
+            idn = self._query_during_connect("*IDN?")
+            self.identity = InstrumentIdentity.from_idn(idn)
+            self.last_system_error = self._query_during_connect("SYST:ERR?")
+            if not self.system_error_is_clear(self.last_system_error):
+                self._emit("Error", f"SYST:ERR returned {self.last_system_error}")
+            self._emit("Connection", "Instrument connected successfully")
+            return self.identity
+        except InstrumentError:
+            raise
+        except Exception as exc:
+            raise self._map_exception(exc, opening=True) from exc
+
+    def _query_during_connect(self, command: str) -> str:
+        self._emit("TX", command)
+        if self._session is None:
+            raise InstrumentConnectionError("VISA session is not open.")
+        try:
+            response = str(self._session.query(command)).strip()
+        except Exception as exc:
+            raise self._map_exception(exc, opening=True) from exc
+        self._emit("RX", response)
+        return response
+
+    def _format_connection_failures(self, failures: list[tuple[str, InstrumentError]]) -> str:
+        if len(failures) == 1:
+            return str(failures[0][1])
+        lines = ["Could not connect to E5071C using the available LAN VISA resources."]
+        lines.extend(f"- {resource}: {error}" for resource, error in failures)
+        lines.append(
+            "Check the IP address, E5071C LAN remote-control setting, and firewall. "
+            "For SOCKET mode, the analyzer must answer SCPI on TCP port 5025; "
+            "for inst0::INSTR mode, enable the instrument LAN/VXI-11 service."
+        )
+        return "\n".join(lines)
 
     def _close_session(self) -> None:
         for obj_name in ("_session", "_resource_manager"):
             obj = getattr(self, obj_name)
             if obj is None:
                 continue
-            try:
+            with suppress(Exception):
                 obj.close()
-            except Exception:
-                pass
             setattr(self, obj_name, None)
 
     def _write_raw(self, command: str) -> None:
@@ -581,6 +695,25 @@ class E5071C(BaseVNA):
             self._handle_io_error(error)
             raise error from exc
 
+    def _query_binary_block(self, command: str) -> bytes:
+        self._emit("TX", command)
+        try:
+            if self.mock:
+                data = self._mock_query_binary_block(command)
+            else:
+                if self._session is None:
+                    raise InstrumentConnectionError("VISA session is not open.")
+                self._session.write(command)
+                data = self._read_ieee_binary_block_response()
+            self._emit("RX", f"<{len(data)} bytes>")
+            return data
+        except InstrumentError:
+            raise
+        except Exception as exc:
+            error = self._map_exception(exc)
+            self._handle_io_error(error)
+            raise error from exc
+
     def _control_write(self, command: str) -> None:
         self._ensure_connected()
         self._write_raw(command)
@@ -589,6 +722,60 @@ class E5071C(BaseVNA):
         response = self._query_raw("*OPC?")
         if response.strip() not in {"1", "+1"}:
             raise InstrumentCommandError(f"Unexpected *OPC? response: {response}")
+
+    def _read_ieee_binary_block_response(self) -> bytes:
+        prefix = self._read_session_bytes(2)
+        if len(prefix) != 2 or prefix[:1] != b"#":
+            raise InstrumentCommandError("Expected IEEE binary block response.")
+        digit_count_text = prefix[1:2].decode("ascii", errors="strict")
+        if not digit_count_text.isdigit():
+            raise InstrumentCommandError("Invalid binary block header.")
+        digit_count = int(digit_count_text)
+        if digit_count == 0:
+            raise InstrumentCommandError("Indefinite binary blocks are not supported.")
+        length_text = self._read_session_bytes(digit_count).decode("ascii", errors="strict")
+        if not length_text.isdigit():
+            raise InstrumentCommandError("Invalid binary block length.")
+        data = self._read_session_bytes(int(length_text))
+        self._drain_binary_terminator()
+        return data
+
+    def _read_session_bytes(self, count: int) -> bytes:
+        if self._session is None:
+            raise InstrumentConnectionError("VISA session is not open.")
+        data = bytearray()
+        while len(data) < count:
+            remaining = count - len(data)
+            if hasattr(self._session, "read_bytes"):
+                chunk = self._session.read_bytes(remaining)
+            else:
+                try:
+                    chunk = self._session.read_raw(remaining)
+                except TypeError:
+                    chunk = self._session.read_raw()
+            chunk = bytes(chunk)
+            if not chunk:
+                raise InstrumentConnectionError("Instrument returned an incomplete binary block.")
+            data.extend(chunk[:remaining])
+        return bytes(data)
+
+    def _drain_binary_terminator(self) -> None:
+        if self._session is None:
+            return
+        original_timeout = getattr(self._session, "timeout", None)
+        try:
+            if original_timeout is not None:
+                with suppress(Exception):
+                    self._session.timeout = min(int(original_timeout), 200)
+            terminator = self._read_session_bytes(1)
+            if terminator == b"\r":
+                self._read_session_bytes(1)
+        except Exception:
+            pass
+        finally:
+            if original_timeout is not None:
+                with suppress(Exception):
+                    self._session.timeout = original_timeout
 
     def _handle_io_error(self, error: InstrumentError) -> None:
         self._emit("Error", str(error))
@@ -603,19 +790,33 @@ class E5071C(BaseVNA):
         if "VI_ERROR_RSRC_NFOUND" in upper or "RESOURCE NOT FOUND" in upper:
             return InstrumentConnectionError(f"VISA resource not found: {self.resource}")
         if "VI_ERROR_TMO" in upper or "TIMEOUT" in upper or "TIMED OUT" in upper:
-            return InstrumentTimeoutError(f"Instrument timeout after {self.timeout_ms} ms.")
+            return InstrumentTimeoutError(
+                f"Instrument timeout after {self.timeout_ms} ms on {self.resource}."
+            )
         if "CONNECTION REFUSED" in upper:
             return InstrumentConnectionError(f"Connection refused by {self.resource}.")
         if "NO ROUTE" in upper or "UNREACHABLE" in upper or "BROKEN PIPE" in upper:
             return InstrumentConnectionError(f"LAN disconnected or unreachable: {self.resource}.")
         if opening:
-            return InstrumentConnectionError(f"Could not open VISA resource {self.resource}: {text}")
+            return InstrumentConnectionError(
+                f"Could not open VISA resource {self.resource}: {text}"
+            )
         return InstrumentConnectionError(f"Instrument communication failed: {text}")
 
     def _raise_if_system_error(self) -> None:
-        response = self.query_error()
-        if not self.system_error_is_clear(response):
-            raise InstrumentCommandError(f"Instrument reported SCPI error: {response}")
+        errors: list[str] = []
+        for _ in range(32):
+            response = self.query_error()
+            if self.system_error_is_clear(response):
+                if errors:
+                    raise InstrumentCommandError(
+                        "Instrument reported SCPI error: " + "; ".join(errors)
+                    )
+                return
+            errors.append(response)
+        raise InstrumentCommandError(
+            "Instrument SCPI error queue did not clear: " + "; ".join(errors)
+        )
 
     def _ensure_connected(self) -> None:
         if not self._connected:
@@ -679,6 +880,20 @@ class E5071C(BaseVNA):
             return ",".join(f'"{module}"' for module in self._mock_ecal_modules)
         if header == "SYST:COMM:ECAL:DEF":
             return self._mock_selected_ecal
+        if header == "MMEM:CAT":
+            directory = self._normalize_vna_directory_path(
+                self._parameter(segment).strip().strip('"')
+            )
+            children: list[str] = []
+            prefix = f"{directory}\\" if directory else ""
+            for candidate in self._mock_vna_directories:
+                if candidate == directory or not candidate.startswith(prefix):
+                    continue
+                remainder = candidate[len(prefix) :]
+                if remainder and "\\" not in remainder:
+                    children.append(remainder)
+            entries = ",".join(f'"{name}",,0' for name in sorted(children))
+            return f"0,100000000,{entries}" if entries else "0,100000000"
         marker_match = re.fullmatch(r"CALC\d+:TRAC(\d+):MARK(\d+):Y", header)
         if marker_match:
             trace = int(marker_match.group(1))
@@ -709,6 +924,15 @@ class E5071C(BaseVNA):
         self._mock_system_error = '-113,"Undefined header"'
         raise InstrumentCommandError(f"Invalid SCPI for mock E5071C: {segment}")
 
+    def _mock_query_binary_block(self, command: str) -> bytes:
+        header = self._header(command).replace("?", "")
+        if header == "MMEM:TRAN":
+            if self._mock_screen_capture_format == "BMP":
+                return b"BMmock-smithpilot-screen-capture"
+            return b"\x89PNG\r\n\x1a\nmock-smithpilot-screen-capture"
+        self._mock_system_error = '-113,"Undefined header"'
+        raise InstrumentCommandError(f"Invalid binary query for mock E5071C: {command}")
+
     def _mock_write(self, command: str) -> None:
         for segment in self._segments(command):
             header = self._header(segment)
@@ -720,13 +944,12 @@ class E5071C(BaseVNA):
                 self._mock_stop_hz = float(parameter)
             elif header in self._POINT_HEADERS:
                 self._mock_points = int(parameter)
-            elif header in self._INIT_CONT_HEADERS:
-                pass
-            elif header in self._INIT_SINGLE_HEADERS:
-                pass
-            elif header in self._TRIGGER_SOURCE_HEADERS:
-                pass
-            elif header == "*TRG":
+            elif (
+                header in self._INIT_CONT_HEADERS
+                or header in self._INIT_SINGLE_HEADERS
+                or header in self._TRIGGER_SOURCE_HEADERS
+                or header == "*TRG"
+            ):
                 pass
             elif self._mock_accepts_v02_write(header, parameter):
                 self._mock_apply_v02_write(header, parameter)
@@ -744,6 +967,9 @@ class E5071C(BaseVNA):
             r"CALC\d+:FORM",
             r"CALC\d+:TRAC\d+:MARK\d+:ACT",
             r"CALC\d+:TRAC\d+:MARK\d+:X",
+            r"DISP:WIND\d+:TRAC\d+:STAT",
+            r"DISP:WIND\d+:TRAC\d+:MEM",
+            r"CALC\d+:MATH:MEM",
             r"DISP:TABL",
             r"DISP:TABL:TYPE",
             r"SENS\d+:CORR:COLL:CKIT",
@@ -759,6 +985,9 @@ class E5071C(BaseVNA):
             r"SENS\d+:CORR:EXT:AUTO:LOSS",
             r"SENS\d+:CORR:EXT:AUTO:DCOF",
             r"SENS\d+:CORR:EXT:AUTO:MEAS",
+            r"MMEM:STOR:IMAG",
+            r"MMEM:MDIR",
+            r"MMEM:DEL",
             r"MMEM:STOR:STYP",
             r"MMEM:STOR",
             r"MMEM:LOAD",
@@ -778,6 +1007,14 @@ class E5071C(BaseVNA):
             return
         if header == "SYST:COMM:ECAL:DEF":
             self._mock_selected_ecal = parameter.strip().strip('"')
+            return
+        if header == "MMEM:STOR:IMAG":
+            suffix = PureWindowsPath(parameter.strip().strip('"')).suffix.lstrip(".")
+            self._mock_screen_capture_format = self._safe_image_format(suffix)
+            return
+        if header == "MMEM:MDIR":
+            directory = self._normalize_vna_directory_path(parameter.strip().strip('"'))
+            self._mock_vna_directories.add(directory)
             return
         ext_port_match = re.fullmatch(r"SENS\d+:CORR:EXT:AUTO:PORT([1-4])", header)
         if ext_port_match:
@@ -872,18 +1109,32 @@ class E5071C(BaseVNA):
             raise InstrumentCommandError("Auto Port Extension port values must be unique.")
         for port in selected_ports:
             if isinstance(port, bool) or port not in {1, 2}:
-                raise InstrumentCommandError("Auto Port Extension supports Port 1, Port 2, or both.")
+                raise InstrumentCommandError(
+                    "Auto Port Extension supports Port 1, Port 2, or both."
+                )
         return selected_ports
+
+    @staticmethod
+    def _ensure_traces(traces: Sequence[int]) -> tuple[int, ...]:
+        trace_numbers = tuple(traces)
+        if not trace_numbers:
+            raise InstrumentCommandError("Select at least one trace.")
+        if len(set(trace_numbers)) != len(trace_numbers):
+            raise InstrumentCommandError("Trace values must be unique.")
+        for trace in trace_numbers:
+            if isinstance(trace, bool) or trace < 1 or trace > 16:
+                raise InstrumentCommandError("Trace must be between 1 and 16.")
+        return trace_numbers
 
     @staticmethod
     def _ensure_measurement_parameter(measurement: str) -> None:
         if measurement not in {"S11", "S12", "S21", "S22"}:
-            raise InstrumentCommandError(f"Unsupported V0.2 measurement parameter: {measurement}")
+            raise InstrumentCommandError(f"Unsupported measurement parameter: {measurement}")
 
     @staticmethod
     def _ensure_display_format(display_format: str) -> None:
         if display_format not in {"SMIT", "SMITH", "MLOG", "SWR", "PHAS", "POL"}:
-            raise InstrumentCommandError(f"Unsupported V0.2 display format: {display_format}")
+            raise InstrumentCommandError(f"Unsupported display format: {display_format}")
 
     @staticmethod
     def _normalize_standard(standard: str) -> str:
@@ -902,6 +1153,99 @@ class E5071C(BaseVNA):
         if len(parts) < 2:
             raise InstrumentCommandError(f"Expected numeric pair, got: {response}")
         return float(parts[0]), float(parts[1])
+
+    @staticmethod
+    def _parse_ieee_binary_block(raw: bytes) -> bytes:
+        if not raw.startswith(b"#"):
+            return raw.rstrip(b"\r\n")
+        if len(raw) < 2:
+            raise InstrumentCommandError("Invalid binary block response.")
+        digit_count = int(chr(raw[1]))
+        if digit_count == 0:
+            return raw[2:].rstrip(b"\r\n")
+        header_end = 2 + digit_count
+        if len(raw) < header_end:
+            raise InstrumentCommandError("Incomplete binary block header.")
+        data_length = int(raw[2:header_end].decode("ascii"))
+        data_end = header_end + data_length
+        if len(raw) < data_end:
+            raise InstrumentCommandError("Incomplete binary block data.")
+        return raw[header_end:data_end]
+
+    @staticmethod
+    def _safe_image_format(value: str) -> str:
+        image_format = value.strip().upper()
+        if image_format not in {"PNG", "BMP"}:
+            raise InstrumentCommandError("Screen capture format must be PNG or BMP.")
+        return image_format
+
+    @staticmethod
+    def _temporary_vna_image_path(image_format: str) -> str:
+        return f"D:SmithPilotCaptureTemp.{image_format.lower()}"
+
+    def _ensure_vna_parent_directory(self, vna_path: str) -> None:
+        parent = PureWindowsPath(vna_path).parent
+        if not parent.root:
+            return
+
+        current = PureWindowsPath(parent.anchor)
+        for part in parent.parts[1:]:
+            names = self._list_vna_directory_names(str(current))
+            candidate = current / part
+            if part.casefold() not in {name.casefold() for name in names}:
+                directory = self._safe_vna_directory_path(str(candidate))
+                self._control_write(f':MMEM:MDIR "{directory}"')
+                self._raise_if_system_error()
+            current = candidate
+
+    def _list_vna_directory_names(self, directory: str) -> tuple[str, ...]:
+        safe_directory = self._safe_vna_directory_path(directory)
+        response = self._query_raw(f':MMEM:CAT? "{safe_directory}"')
+        self._raise_if_system_error()
+        return self._parse_vna_catalog_names(response)
+
+    @staticmethod
+    def _parse_vna_catalog_names(response: str) -> tuple[str, ...]:
+        fields = next(csv.reader([response.strip()]))
+        if len(fields) == 1 and "," in fields[0]:
+            fields = next(csv.reader([fields[0]]))
+        if len(fields) < 2:
+            raise InstrumentCommandError(f"Invalid VNA directory catalog: {response}")
+        return tuple(
+            field.strip().rstrip("\\/") for field in fields[2::3] if field.strip().rstrip("\\/")
+        )
+
+    @staticmethod
+    def _normalize_vna_directory_path(value: str) -> str:
+        return str(PureWindowsPath(value)).rstrip("\\/").casefold()
+
+    @staticmethod
+    def _safe_vna_directory_path(value: str) -> str:
+        text = value.strip()
+        if not text or len(text) > 254:
+            raise InstrumentCommandError("VNA directory path must be 1-254 characters.")
+        if '"' in text or ";" in text or "\r" in text or "\n" in text:
+            raise InstrumentCommandError("VNA directory path contains unsupported characters.")
+        if not re.fullmatch(r"[A-Za-z0-9_.:/\\ -]+", text):
+            raise InstrumentCommandError("VNA directory path contains unsupported characters.")
+        if any(part == ".." for part in re.split(r"[\\/]", text)):
+            raise InstrumentCommandError("VNA directory path cannot contain '..' path segments.")
+        return text
+
+    @staticmethod
+    def _safe_vna_image_path(value: str) -> str:
+        text = value.strip()
+        if not text or len(text) > 254:
+            raise InstrumentCommandError("VNA image path must be 1-254 characters.")
+        if '"' in text or ";" in text or "\r" in text or "\n" in text:
+            raise InstrumentCommandError("VNA image path contains unsupported characters.")
+        if not re.fullmatch(r"[A-Za-z0-9_.:/\\ -]+", text):
+            raise InstrumentCommandError("VNA image path contains unsupported characters.")
+        if any(part == ".." for part in re.split(r"[\\/]", text)):
+            raise InstrumentCommandError("VNA image path cannot contain '..' path segments.")
+        if PureWindowsPath(text).suffix.lower() not in {".png", ".bmp"}:
+            raise InstrumentCommandError("VNA image path must end with .png or .bmp.")
+        return text
 
     @staticmethod
     def _safe_label(value: str, label: str) -> str:

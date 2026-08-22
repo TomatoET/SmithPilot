@@ -4,9 +4,9 @@ import math
 import re
 from collections.abc import Callable
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
-from PySide6.QtCore import QSettings, QThread, Signal, Qt
+from PySide6.QtCore import QSettings, Qt, QThread, Signal
 from PySide6.QtGui import QDoubleValidator
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -19,35 +19,30 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMainWindow,
     QMessageBox,
-    QPushButton,
     QPlainTextEdit,
+    QPushButton,
     QRadioButton,
     QSizePolicy,
     QSpinBox,
     QTabWidget,
-    QTableWidget,
-    QTableWidgetItem,
-    QListWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from instrument import E5071C, InstrumentCommandError, InstrumentIdentity
+from app import APP_VERSION
 from app.vna_workflow import (
     BAND_PRESETS_PATH,
-    DutChecklist,
-    MarkerReading,
     build_two_port_calibration_steps,
     builtin_band_presets,
-    default_ecal_plan,
     default_band_presets,
+    default_ecal_plan,
     default_trace_setup,
-    judge_marker_results,
 )
+from instrument import E5071C, InstrumentCommandError, InstrumentIdentity
 from utils.logger import LogEntry, format_log_entry
-
 
 FREQUENCY_UNITS = {
     "Hz": 1.0,
@@ -75,10 +70,12 @@ class InstrumentWorker(QThread):
 class MainWindow(QMainWindow):
     driver_log = Signal(str, str)
     LAST_IP_ADDRESS_KEY = "connection/last_ip_address"
+    LAST_CAPTURE_VNA_FOLDER_KEY = "capture/vna_folder"
+    LAST_CAPTURE_PC_FOLDER_KEY = "capture/pc_folder"
 
     def __init__(self, settings: QSettings | None = None) -> None:
         super().__init__()
-        self.setWindowTitle("SmithPilot V0.3 - E5071C VNA Workflow")
+        self.setWindowTitle(f"SmithPilot {APP_VERSION} - E5071C VNA Workflow")
         self.settings = settings or QSettings()
         self.driver: E5071C | None = None
         self.worker: InstrumentWorker | None = None
@@ -94,6 +91,7 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._load_saved_ip_address()
+        self._load_capture_folders()
         self._connect_signals()
         self._refresh_resource()
         self._apply_band_preset()
@@ -110,7 +108,7 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(14, 14, 14, 14)
         main_layout.setSpacing(10)
 
-        title = QLabel("SmithPilot V0.3\nE5071C VNA Workflow")
+        title = QLabel(f"SmithPilot {APP_VERSION}\nE5071C VNA Workflow")
         title.setObjectName("titleLabel")
         title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         main_layout.addWidget(title)
@@ -144,7 +142,7 @@ class MainWindow(QMainWindow):
         setup_layout = QVBoxLayout(setup_tab)
         setup_layout.addWidget(self.v02_setup_group)
         setup_layout.addStretch(1)
-        self.tabs.addTab(setup_tab, "V0.2 Setup")
+        self.tabs.addTab(setup_tab, "Setup")
 
         calibration_tab = QWidget()
         calibration_layout = QVBoxLayout(calibration_tab)
@@ -160,7 +158,7 @@ class MainWindow(QMainWindow):
         dut_tab = QWidget()
         dut_layout = QVBoxLayout(dut_tab)
         dut_layout.addWidget(self.dut_group)
-        self.tabs.addTab(dut_tab, "DUT Measurement")
+        self.tabs.addTab(dut_tab, "Measurement Tools")
 
         log_tab = QWidget()
         log_layout = QVBoxLayout(log_tab)
@@ -226,8 +224,12 @@ class MainWindow(QMainWindow):
         self.points_spin.setValue(201)
 
         form = QFormLayout()
-        form.addRow("Start Frequency:", self._with_unit(self.start_frequency_edit, self.start_unit_combo))
-        form.addRow("Stop Frequency:", self._with_unit(self.stop_frequency_edit, self.stop_unit_combo))
+        form.addRow(
+            "Start Frequency:", self._with_unit(self.start_frequency_edit, self.start_unit_combo)
+        )
+        form.addRow(
+            "Stop Frequency:", self._with_unit(self.stop_frequency_edit, self.stop_unit_combo)
+        )
         form.addRow("Points:", self.points_spin)
         layout.addLayout(form)
 
@@ -289,7 +291,7 @@ class MainWindow(QMainWindow):
         return group
 
     def _build_v02_setup_group(self) -> QGroupBox:
-        group = QGroupBox("V0.2 Measurement Setup")
+        group = QGroupBox("Measurement Setup")
         layout = QVBoxLayout(group)
 
         form = QFormLayout()
@@ -483,40 +485,62 @@ class MainWindow(QMainWindow):
         return group
 
     def _build_dut_group(self) -> QGroupBox:
-        group = QGroupBox("DUT Measurement")
+        group = QGroupBox("Measurement Tools")
         layout = QVBoxLayout(group)
 
-        checklist_group = QGroupBox("Pre-measurement Checklist")
-        checklist_layout = QVBoxLayout(checklist_group)
-        self.pa_removed_checkbox = QCheckBox("PA removed or isolated from the measurement path")
-        self.port1_soldered_checkbox = QCheckBox("Port 1 connected to DUT-side PA output node")
-        self.port2_connected_checkbox = QCheckBox("Port 2 connected to antenna-side RF test port")
-        self.platform_path_checkbox = QCheckBox("Platform tool has opened the required RF path")
-        self.no_high_power_checkbox = QCheckBox("No high-power RF output is present")
-        for checkbox in (
-            self.pa_removed_checkbox,
-            self.port1_soldered_checkbox,
-            self.port2_connected_checkbox,
-            self.platform_path_checkbox,
-            self.no_high_power_checkbox,
-        ):
-            checklist_layout.addWidget(checkbox)
-        layout.addWidget(checklist_group)
+        trace_memory_group = QGroupBox("Trace Memory")
+        trace_memory_layout = QVBoxLayout(trace_memory_group)
 
         button_row = QHBoxLayout()
-        self.sweep_read_markers_button = QPushButton("Sweep + Read Markers")
-        button_row.addWidget(self.sweep_read_markers_button)
+        self.display_data_mem_button = QPushButton("Display Data & Mem")
+        self.copy_data_to_mem_button = QPushButton("Data -> Mem: Trace 1-3")
+        button_row.addWidget(self.display_data_mem_button)
+        button_row.addWidget(self.copy_data_to_mem_button)
         button_row.addStretch(1)
-        layout.addLayout(button_row)
+        trace_memory_layout.addLayout(button_row)
 
-        self.marker_table = QTableWidget(0, 5)
-        self.marker_table.setHorizontalHeaderLabels(["Trace", "Marker", "Freq", "Primary", "Secondary"])
-        layout.addWidget(self.marker_table)
+        self.measurement_tools_status_label = QLabel("Ready")
+        self.measurement_tools_status_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        trace_memory_layout.addWidget(self.measurement_tools_status_label)
 
-        self.judgement_text = QPlainTextEdit()
-        self.judgement_text.setReadOnly(True)
-        self.judgement_text.setMaximumHeight(100)
-        layout.addWidget(self.judgement_text)
+        layout.addWidget(trace_memory_group)
+
+        screen_capture_group = QGroupBox("Screen Capture")
+        screen_capture_layout = QVBoxLayout(screen_capture_group)
+        self.capture_form = QFormLayout()
+
+        self.capture_name_edit = QLineEdit("screen_capture")
+        self.capture_format_combo = QComboBox()
+        self.capture_format_combo.addItems(["PNG", "BMP"])
+        self.capture_timestamp_checkbox = QCheckBox("Add timestamp")
+        self.capture_timestamp_checkbox.setChecked(True)
+
+        self.capture_vna_folder_edit = QLineEdit("D:\\SmithPilot\\Images")
+        self.capture_pc_folder_edit = QLineEdit(str(self._default_capture_folder()))
+        self.capture_browse_button = QPushButton("Browse")
+        pc_folder_row = QHBoxLayout()
+        pc_folder_row.addWidget(self.capture_pc_folder_edit, 1)
+        pc_folder_row.addWidget(self.capture_browse_button)
+
+        self.capture_form.addRow("File Name:", self.capture_name_edit)
+        self.capture_form.addRow("Format:", self.capture_format_combo)
+        self.capture_form.addRow("", self.capture_timestamp_checkbox)
+        self.capture_form.addRow("VNA Folder:", self.capture_vna_folder_edit)
+        self.capture_form.addRow("Save To PC:", self._wrap_layout(pc_folder_row))
+        screen_capture_layout.addLayout(self.capture_form)
+
+        capture_button_row = QHBoxLayout()
+        self.capture_screen_button = QPushButton("Capture Screen")
+        capture_button_row.addWidget(self.capture_screen_button)
+        capture_button_row.addStretch(1)
+        screen_capture_layout.addLayout(capture_button_row)
+
+        self.capture_status_label = QLabel("Ready")
+        self.capture_status_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        screen_capture_layout.addWidget(self.capture_status_label)
+
+        layout.addWidget(screen_capture_group)
+        layout.addStretch(1)
         return group
 
     def _connect_signals(self) -> None:
@@ -551,7 +575,12 @@ class MainWindow(QMainWindow):
         self.configure_port_extension_button.clicked.connect(self._configure_port_extension)
         self.measure_port_extension_button.clicked.connect(self._measure_port_extension)
         self.read_port_extension_button.clicked.connect(self._read_port_extension_result)
-        self.sweep_read_markers_button.clicked.connect(self._sweep_and_read_markers)
+        self.display_data_mem_button.clicked.connect(self._display_traces_data_and_memory)
+        self.copy_data_to_mem_button.clicked.connect(self._copy_traces_data_to_memory)
+        self.capture_vna_folder_edit.editingFinished.connect(self._remember_capture_folders)
+        self.capture_pc_folder_edit.editingFinished.connect(self._remember_capture_folders)
+        self.capture_browse_button.clicked.connect(self._browse_capture_folder)
+        self.capture_screen_button.clicked.connect(self._capture_screen_to_pc)
 
     def _apply_styles(self) -> None:
         self.setStyleSheet(
@@ -645,6 +674,23 @@ class MainWindow(QMainWindow):
         self.settings.setValue(self.LAST_IP_ADDRESS_KEY, ip_address)
         self.settings.sync()
 
+    def _load_capture_folders(self) -> None:
+        vna_folder = str(self.settings.value(self.LAST_CAPTURE_VNA_FOLDER_KEY, "") or "").strip()
+        pc_folder = str(self.settings.value(self.LAST_CAPTURE_PC_FOLDER_KEY, "") or "").strip()
+        if vna_folder:
+            self.capture_vna_folder_edit.setText(vna_folder)
+        if pc_folder:
+            self.capture_pc_folder_edit.setText(pc_folder)
+
+    def _remember_capture_folders(self) -> None:
+        vna_folder = self.capture_vna_folder_edit.text().strip()
+        pc_folder = self.capture_pc_folder_edit.text().strip()
+        if vna_folder:
+            self.settings.setValue(self.LAST_CAPTURE_VNA_FOLDER_KEY, vna_folder)
+        if pc_folder:
+            self.settings.setValue(self.LAST_CAPTURE_PC_FOLDER_KEY, pc_folder)
+        self.settings.sync()
+
     def _load_band_presets(self) -> None:
         try:
             self.band_presets = list(default_band_presets())
@@ -683,13 +729,19 @@ class MainWindow(QMainWindow):
         band = self.band_combo.currentData()
         if band is None:
             return
-        self._set_frequency_controls(float(band.start_hz), self.start_frequency_edit, self.start_unit_combo)
-        self._set_frequency_controls(float(band.stop_hz), self.stop_frequency_edit, self.stop_unit_combo)
+        self._set_frequency_controls(
+            float(band.start_hz), self.start_frequency_edit, self.start_unit_combo
+        )
+        self._set_frequency_controls(
+            float(band.stop_hz), self.stop_frequency_edit, self.stop_unit_combo
+        )
         self.points_spin.setValue(int(band.points))
         marker_unit = self._best_unit(max(float(value) for value in band.marker_hz))
         self.marker_unit_combo.setCurrentText(marker_unit)
         self.marker_edit.setText(
-            ", ".join(f"{float(value) / FREQUENCY_UNITS[marker_unit]:.12g}" for value in band.marker_hz)
+            ", ".join(
+                f"{float(value) / FREQUENCY_UNITS[marker_unit]:.12g}" for value in band.marker_hz
+            )
         )
         self.v02_setup_status_label.setText(f"Preset applied: {band.name}")
 
@@ -718,8 +770,8 @@ class MainWindow(QMainWindow):
             )
 
         def on_success(_: object) -> None:
-            self.v02_setup_status_label.setText("V0.2 analyzer setup applied.")
-            self._show_status("V0.2 analyzer setup applied.")
+            self.v02_setup_status_label.setText("Analyzer setup applied.")
+            self._show_status("Analyzer setup applied.")
 
         self._run_worker(operation, on_success)
 
@@ -767,7 +819,9 @@ class MainWindow(QMainWindow):
 
         def operation() -> None:
             if step.action == "start_two_port_solt":
-                driver.start_two_port_solt_calibration(cal_kit=self.cal_kit_edit.text().strip() or "85032F")
+                driver.start_two_port_solt_calibration(
+                    cal_kit=self.cal_kit_edit.text().strip() or "85032F"
+                )
             elif step.action.startswith("measure_"):
                 driver.acquire_calibration_standard(step.standard, step.ports)
             elif step.action == "save_calibration":
@@ -786,7 +840,9 @@ class MainWindow(QMainWindow):
         driver = self._require_driver()
         if driver is None:
             return
-        if not self._confirm_step("Cancel Calibration", "Cancel the current calibration collection?"):
+        if not self._confirm_step(
+            "Cancel Calibration", "Cancel the current calibration collection?"
+        ):
             return
 
         def operation() -> None:
@@ -901,9 +957,7 @@ class MainWindow(QMainWindow):
             driver.perform_two_port_ecal(ports)
 
         def on_success(_: object) -> None:
-            self.ecal_status_label.setText(
-                f"2-Port ECal complete for Port {ports[0]}-{ports[1]}."
-            )
+            self.ecal_status_label.setText(f"2-Port ECal complete for Port {ports[0]}-{ports[1]}.")
             self._show_status("2-Port ECal complete.")
 
         self._run_worker(operation, on_success)
@@ -990,29 +1044,96 @@ class MainWindow(QMainWindow):
 
         self._run_worker(operation, on_success)
 
-    def _sweep_and_read_markers(self) -> None:
+    def _display_traces_data_and_memory(self) -> None:
         driver = self._require_driver()
         if driver is None:
             return
-        checklist = self._dut_checklist()
-        if not checklist.is_ready():
-            self._show_error("DUT checklist incomplete:\n" + "\n".join(checklist.missing_items()))
+
+        def operation() -> None:
+            driver.display_traces_data_and_memory(traces=(1, 2, 3))
+
+        def on_success(_: object) -> None:
+            message = "Data and memory traces displayed for Trace 1-3."
+            self.measurement_tools_status_label.setText(message)
+            self._show_status(message)
+
+        self._run_worker(operation, on_success)
+
+    def _copy_traces_data_to_memory(self) -> None:
+        driver = self._require_driver()
+        if driver is None:
+            return
+
+        def operation() -> None:
+            driver.copy_traces_data_to_memory(traces=(1, 2, 3))
+
+        def on_success(_: object) -> None:
+            message = "Trace 1-3 data copied to memory."
+            self.measurement_tools_status_label.setText(message)
+            self._show_status(message)
+
+        self._run_worker(operation, on_success)
+
+    def _browse_capture_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Select Capture Folder",
+            self.capture_pc_folder_edit.text().strip() or str(self._default_capture_folder()),
+        )
+        if folder:
+            self.capture_pc_folder_edit.setText(folder)
+            self._remember_capture_folders()
+
+    def _capture_screen_to_pc(self) -> None:
+        driver = self._require_driver()
+        if driver is None:
             return
         try:
-            marker_hz = self._read_marker_frequencies_hz()
+            image_format = self.capture_format_combo.currentText().strip().upper()
+            pc_path = self._screen_capture_pc_path()
+            vna_path = self._screen_capture_vna_path(pc_path.name)
         except InstrumentCommandError as exc:
             self._show_error(str(exc))
             return
 
-        def operation() -> object:
-            driver.trigger_single_sweep()
-            return driver.read_v02_marker_results(marker_hz=marker_hz, traces=default_trace_setup())
+        self._remember_capture_folders()
+
+        if pc_path.exists():
+            reply = QMessageBox.question(
+                self,
+                "Overwrite Capture",
+                f"{pc_path} already exists.\n\nOverwrite this file?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply != QMessageBox.Yes:
+                self.capture_status_label.setText("Capture canceled.")
+                return
+
+        self.capture_status_label.setText("Capturing screen...")
+
+        def operation() -> tuple[str, str]:
+            image = driver.capture_screen_image(
+                image_format=image_format,
+                vna_path=vna_path,
+                keep_vna_copy=True,
+            )
+            pc_path.parent.mkdir(parents=True, exist_ok=True)
+            pc_path.write_bytes(image)
+            return str(pc_path), vna_path
 
         def on_success(result: object) -> None:
-            self._populate_marker_results(list(result))
-            self._show_status("Marker results read.")
+            local_path, saved_vna_path = result
+            message = f"Screen captured to {local_path}"
+            if saved_vna_path:
+                message = f"{message}; VNA copy saved to {saved_vna_path}"
+            self.capture_status_label.setText(message)
+            self._show_status(message)
 
-        self._run_worker(operation, on_success)
+        def on_failure(message: str) -> None:
+            self.capture_status_label.setText(f"Capture failed: {message}")
+
+        self._run_worker(operation, on_success, on_failure=on_failure)
 
     def _connect_to_instrument(self) -> None:
         if self.worker is not None:
@@ -1030,7 +1151,7 @@ class MainWindow(QMainWindow):
         driver = E5071C(
             ip_address=ip_address,
             resource=self.resource_edit.text().strip(),
-            timeout_ms=5000,
+            timeout_ms=10000,
             mock=mock,
             log_callback=self.driver_log.emit,
         )
@@ -1042,6 +1163,7 @@ class MainWindow(QMainWindow):
         def on_success(result: object) -> None:
             connected_driver, identity, system_error = result
             self.driver = connected_driver
+            self.resource_edit.setText(connected_driver.resource)
             self._set_identity(identity)
             self._set_connected(True, mock=connected_driver.mock)
             if system_error and not E5071C.system_error_is_clear(system_error):
@@ -1076,8 +1198,12 @@ class MainWindow(QMainWindow):
 
         def on_success(result: object) -> None:
             data = result
-            self._set_frequency_controls(float(data["start"]), self.start_frequency_edit, self.start_unit_combo)
-            self._set_frequency_controls(float(data["stop"]), self.stop_frequency_edit, self.stop_unit_combo)
+            self._set_frequency_controls(
+                float(data["start"]), self.start_frequency_edit, self.start_unit_combo
+            )
+            self._set_frequency_controls(
+                float(data["stop"]), self.stop_frequency_edit, self.stop_unit_combo
+            )
             self.points_spin.setValue(int(data["points"]))
             self.sweep_result_label.setText(
                 "Requested: -\n"
@@ -1095,7 +1221,9 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            requested_start = self._read_frequency_hz(self.start_frequency_edit, self.start_unit_combo)
+            requested_start = self._read_frequency_hz(
+                self.start_frequency_edit, self.start_unit_combo
+            )
             requested_stop = self._read_frequency_hz(self.stop_frequency_edit, self.stop_unit_combo)
             requested_points = int(self.points_spin.value())
             if requested_start >= requested_stop:
@@ -1186,6 +1314,7 @@ class MainWindow(QMainWindow):
         self,
         operation: Callable[[], object],
         on_success: Callable[[object], None],
+        on_failure: Callable[[str], None] | None = None,
     ) -> None:
         if self.worker is not None:
             self._show_status("Operation already in progress.")
@@ -1199,6 +1328,8 @@ class MainWindow(QMainWindow):
             on_success(result)
 
         def handle_failure(message: str) -> None:
+            if on_failure is not None:
+                on_failure(message)
             self._show_error(message)
             if self.driver is not None and not self.driver.is_connected():
                 self._set_identity(InstrumentIdentity())
@@ -1340,15 +1471,6 @@ class MainWindow(QMainWindow):
             return "Port 1 + Port 2"
         return f"Port {ports[0]}"
 
-    def _dut_checklist(self) -> DutChecklist:
-        return DutChecklist(
-            pa_removed=self.pa_removed_checkbox.isChecked(),
-            port1_soldered=self.port1_soldered_checkbox.isChecked(),
-            port2_connected=self.port2_connected_checkbox.isChecked(),
-            platform_path_open=self.platform_path_checkbox.isChecked(),
-            no_high_power_confirmed=self.no_high_power_checkbox.isChecked(),
-        )
-
     def _set_port_extension_result(self, result: object) -> None:
         self.port_extension_result_label.setText(self._format_port_extension_result(result))
 
@@ -1369,29 +1491,46 @@ class MainWindow(QMainWindow):
             f"Loss2: {float(result.loss2_db):.3f} dB @ {self._format_hz(float(result.freq2_hz))}"
         )
 
-    def _populate_marker_results(self, results: list[object]) -> None:
-        self.marker_table.setRowCount(len(results))
-        judgement_readings: list[MarkerReading] = []
-        for row, result in enumerate(results):
-            self.marker_table.setItem(row, 0, QTableWidgetItem(str(result.trace)))
-            self.marker_table.setItem(row, 1, QTableWidgetItem(str(result.marker)))
-            self.marker_table.setItem(row, 2, QTableWidgetItem(self._format_hz(float(result.frequency_hz))))
-            self.marker_table.setItem(row, 3, QTableWidgetItem(f"{float(result.primary):.6g}"))
-            self.marker_table.setItem(row, 4, QTableWidgetItem(f"{float(result.secondary):.6g}"))
-            judgement_readings.append(
-                MarkerReading(
-                    trace=str(result.trace),
-                    marker=int(result.marker),
-                    frequency_hz=float(result.frequency_hz),
-                    primary=float(result.primary),
-                    secondary=float(result.secondary),
-                )
+    @staticmethod
+    def _default_capture_folder() -> Path:
+        return Path.home() / "Documents" / "SmithPilot" / "Captures"
+
+    def _screen_capture_pc_path(self) -> Path:
+        folder_text = self.capture_pc_folder_edit.text().strip()
+        if not folder_text:
+            raise InstrumentCommandError("PC capture folder is required.")
+        return Path(folder_text).expanduser() / self._screen_capture_file_name()
+
+    def _screen_capture_vna_path(self, file_name: str) -> str:
+        folder = self.capture_vna_folder_edit.text().strip().rstrip("\\/")
+        if not folder:
+            raise InstrumentCommandError("VNA capture folder is required.")
+        path = f"{folder}\\{file_name}"
+        E5071C._safe_vna_image_path(path)
+        return path
+
+    def _screen_capture_file_name(self) -> str:
+        image_format = self.capture_format_combo.currentText().strip().lower()
+        if image_format not in {"png", "bmp"}:
+            raise InstrumentCommandError("Screen capture format must be PNG or BMP.")
+        stem = self._screen_capture_stem()
+        if self.capture_timestamp_checkbox.isChecked():
+            stem = f"{stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        return f"{stem}.{image_format}"
+
+    def _screen_capture_stem(self) -> str:
+        text = self.capture_name_edit.text().strip()
+        if not text:
+            raise InstrumentCommandError("Screen capture file name is required.")
+        name = PureWindowsPath(text).name.strip()
+        suffix = PureWindowsPath(name).suffix.lower()
+        if suffix in {".png", ".bmp"}:
+            name = name[: -len(suffix)].strip()
+        if not re.fullmatch(r"[A-Za-z0-9_. -]{1,80}", name):
+            raise InstrumentCommandError(
+                "Screen capture file name may contain letters, numbers, spaces, '.', '_', and '-'."
             )
-        self.marker_table.resizeColumnsToContents()
-        judgement = judge_marker_results(judgement_readings)
-        self.judgement_text.setPlainText(
-            judgement.severity.upper() + "\n" + "\n".join(judgement.findings)
-        )
+        return name.replace(" ", "_")
 
     def _append_log(self, kind: str, message: str) -> None:
         entry = LogEntry.now(kind, message)

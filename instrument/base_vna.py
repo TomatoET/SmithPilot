@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
-
 
 LogCallback = Callable[[str, str], None]
 
@@ -16,7 +15,7 @@ class InstrumentIdentity:
     firmware: str = ""
 
     @classmethod
-    def from_idn(cls, response: str) -> "InstrumentIdentity":
+    def from_idn(cls, response: str) -> InstrumentIdentity:
         parts = [part.strip() for part in response.strip().split(",")]
         padded = (parts + ["", "", "", ""])[:4]
         return cls(
