@@ -6,7 +6,6 @@ from math import hypot
 from pathlib import Path
 from typing import Any
 
-
 BAND_PRESETS_PATH = Path(__file__).resolve().parent.parent / "config" / "band_presets.json"
 
 _PRESET_UNIT_MULTIPLIERS = {
@@ -157,6 +156,18 @@ def builtin_band_presets() -> tuple[FrequencyBand, ...]:
             (1_920_000_000.0, 1_950_000_000.0, 1_980_000_000.0),
         ),
         FrequencyBand(
+            "LTE B2 TX",
+            1_850_000_000.0,
+            1_910_000_000.0,
+            (1_850_000_000.0, 1_880_000_000.0, 1_910_000_000.0),
+        ),
+        FrequencyBand(
+            "LTE B34 TX",
+            2_010_000_000.0,
+            2_025_000_000.0,
+            (2_010_000_000.0, 2_017_500_000.0, 2_025_000_000.0),
+        ),
+        FrequencyBand(
             "LTE B38 TX",
             2_570_000_000.0,
             2_620_000_000.0,
@@ -180,14 +191,13 @@ def default_band_presets() -> tuple[FrequencyBand, ...]:
 def load_band_presets(path: str | Path) -> tuple[FrequencyBand, ...]:
     source_path = Path(path)
     payload = json.loads(source_path.read_text(encoding="utf-8"))
-    if isinstance(payload, dict):
-        raw_bands = payload.get("bands")
-    else:
-        raw_bands = payload
+    raw_bands = payload.get("bands") if isinstance(payload, dict) else payload
     if not isinstance(raw_bands, list):
         raise ValueError("Band preset file must contain a 'bands' list.")
 
-    bands = tuple(_parse_band_preset(raw_band, index + 1) for index, raw_band in enumerate(raw_bands))
+    bands = tuple(
+        _parse_band_preset(raw_band, index + 1) for index, raw_band in enumerate(raw_bands)
+    )
     if not bands:
         raise ValueError("Band preset file must contain at least one band.")
     return bands
@@ -216,7 +226,9 @@ def _parse_band_preset(raw_band: Any, index: int) -> FrequencyBand:
     if len(marker_values) > 10:
         raise ValueError(f"Band preset '{name}' cannot contain more than 10 markers.")
 
-    marker_hz = tuple(_number_from_value(value, "markers", index) * multiplier for value in marker_values)
+    marker_hz = tuple(
+        _number_from_value(value, "markers", index) * multiplier for value in marker_values
+    )
     for marker in marker_hz:
         if marker < start_hz or marker > stop_hz:
             raise ValueError(f"Band preset '{name}' marker must be inside sweep span.")
@@ -337,10 +349,8 @@ def judge_marker_results(readings: list[MarkerReading]) -> MeasurementJudgement:
                     f"({reading.primary:.2f} + j{reading.secondary:.2f} ohm)."
                 )
         elif trace == "S21" and reading.primary < -3.0:
-            findings.append(
-                f"S21 marker {reading.marker} Loss is high ({reading.primary:.2f} dB)."
-            )
+            findings.append(f"S21 marker {reading.marker} Loss is high ({reading.primary:.2f} dB).")
 
     if findings:
         return MeasurementJudgement("warning", findings)
-    return MeasurementJudgement("ok", ["Markers are within the initial V0.2 judgement limits."])
+    return MeasurementJudgement("ok", ["Markers are within the initial judgement limits."])

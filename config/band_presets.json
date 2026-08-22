@@ -42,6 +42,22 @@
       "markers": [1920, 1950, 1980]
     },
     {
+      "name": "LTE B2 TX",
+      "unit": "MHz",
+      "start": 1850,
+      "stop": 1910,
+      "points": 1601,
+      "markers": [1850, 1880, 1910]
+    },
+    {
+      "name": "LTE B34 TX",
+      "unit": "MHz",
+      "start": 2010,
+      "stop": 2025,
+      "points": 1601,
+      "markers": [2010, 2017.5, 2025]
+    },
+    {
       "name": "LTE B38 TX",
       "unit": "MHz",
       "start": 2570,

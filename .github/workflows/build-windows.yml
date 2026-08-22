@@ -1,0 +1,53 @@
+name: Build Windows package
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install build dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Test
+        run: python -m unittest discover -s tests
+      - name: Build
+        run: pyinstaller --noconfirm --clean SmithPilot.spec
+      - name: Verify packaged VISA backend
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath dist\SmithPilot\SmithPilot.exe -ArgumentList "--check-visa-backend" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Packaged VISA backend check failed with exit code $($process.ExitCode)."
+          }
+      - name: Archive
+        shell: pwsh
+        run: Compress-Archive -Path dist\SmithPilot\* -DestinationPath SmithPilot-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SmithPilot-windows-x64
+          path: SmithPilot-windows-x64.zip
+          if-no-files-found: error
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$env:GITHUB_REF_NAME"
+          SmithPilot-windows-x64.zip
+          --verify-tag
+          --generate-notes
+          --title "SmithPilot $env:GITHUB_REF_NAME"

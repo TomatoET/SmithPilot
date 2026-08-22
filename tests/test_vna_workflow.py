@@ -8,13 +8,13 @@ from app.vna_workflow import (
     DutChecklist,
     MarkerReading,
     build_two_port_calibration_steps,
-    default_ecal_plan,
+    builtin_band_presets,
     default_band_presets,
+    default_ecal_plan,
     default_trace_setup,
     judge_marker_results,
     load_band_presets,
 )
-
 
 TEST_TMP_ROOT = Path(__file__).resolve().parents[1] / "tmp"
 
@@ -33,6 +33,16 @@ class VnaWorkflowTests(unittest.TestCase):
         lte_b1 = bands["LTE B1 TX"]
         self.assertEqual(lte_b1.start_hz, 1_920_000_000.0)
         self.assertEqual(lte_b1.stop_hz, 1_980_000_000.0)
+
+    def test_builtin_band_presets_include_lte_b2_and_b34(self) -> None:
+        bands = {band.name: band for band in builtin_band_presets()}
+
+        self.assertEqual(
+            bands["LTE B2 TX"].marker_hz, (1_850_000_000.0, 1_880_000_000.0, 1_910_000_000.0)
+        )
+        self.assertEqual(
+            bands["LTE B34 TX"].marker_hz, (2_010_000_000.0, 2_017_500_000.0, 2_025_000_000.0)
+        )
 
     def test_load_band_presets_reads_editable_json_format(self) -> None:
         TEST_TMP_ROOT.mkdir(exist_ok=True)

@@ -1,25 +1,42 @@
+<p align="center">
+  <img src="assets/app_icons/app-icon-128.png" width="96" alt="SmithPilot logo">
+</p>
+
 # SmithPilot
 
-SmithPilot V0.3 is a Windows desktop application for semi-automatic
-Agilent/Keysight E5071C vector network analyzer workflows. It keeps the V0.1
-LAN/SCPI validation tools and adds the VNA workflow from the supplied Vanchip
-usage PDF:
+[![CI](https://github.com/TomatoET/SmithPilot/actions/workflows/ci.yml/badge.svg)](https://github.com/TomatoET/SmithPilot/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D4.svg)](https://github.com/TomatoET/SmithPilot/releases)
 
-- V0.2 measurement setup with editable TX band presets and marker frequencies
+SmithPilot V0.4 is a Windows desktop application for guided
+Agilent/Keysight E5071C vector network analyzer workflows:
+
+- Measurement setup with editable TX band presets and marker frequencies
 - 3-trace analyzer setup: S11 Smith, S22 Smith, S21 Log Mag
 - Mechanical 2-port SOLT calibration wizard for Open, Short, Load, and Thru
 - Electronic 2-port calibration using a USB ECal module
 - Controlled analyzer state Save/Recall
 - Auto Port Extension setup, measurement, and readback
-- DUT measurement checklist and S11/S22/S21 marker readback
-- Basic result judgement for mismatch and insertion loss
+- Measurement Tools for trace data/memory display, Data -> Mem capture, and
+  named screen captures to the PC
 
-V0.3 packages the desktop tool with the final SmithPilot application/window
+V0.4 packages the desktop tool with the final SmithPilot application/window
 icons and Windows executable build assets.
 
-V0.2 remains semi-automatic by design. It does not physically connect
+SmithPilot remains semi-automatic by design. It does not physically connect
 standards, solder fixtures, control the external platform tool, enable PA
 power, or automatically choose matching components.
+
+> [!WARNING]
+> SmithPilot changes analyzer settings, calibration data, state files, and
+> instrument storage. Back up important state and verify all RF connections
+> before using it on hardware. Automated tests do not replace validation on the
+> target analyzer and firmware.
+
+SmithPilot is an independent project and is not affiliated with or endorsed by
+Keysight Technologies or Agilent Technologies. Product names and trademarks
+belong to their respective owners.
 
 ## Technology
 
@@ -35,14 +52,18 @@ power, or automatically choose matching components.
 SmithPilot/
 |-- main.py
 |-- requirements.txt
+|-- requirements-dev.txt
+|-- SmithPilot.spec
 |-- README.md
+|-- LICENSE
 |-- assets/
 |   |-- app_icons/
 |   `-- menu_icons/
 |-- config/
 |   `-- band_presets.json
 |-- docs/
-|   `-- v0.2_prd.md
+|   |-- HARDWARE_VALIDATION.md
+|   `-- workflow_prd.md
 |-- app/
 |   |-- __init__.py
 |   |-- main_window.py
@@ -84,20 +105,26 @@ python main.py
 
 The application starts disconnected. It will not auto-connect to the instrument.
 
+Use `Use Mock Instrument` to explore workflows without opening a VISA session.
+
 ## Windows Package
 
-V0.3 is packaged with PyInstaller as a one-folder Windows build. The release
+V0.4 is packaged with PyInstaller as a one-folder Windows build. The release
 artifact contains:
 
 - `SmithPilot.exe`
 - bundled Python/PySide6/PyVISA runtime dependencies
 - final application and window icon assets
 
-Build command used for the V0.3 package:
+Build the reproducible V0.4 package from the checked-in PyInstaller spec:
 
 ```powershell
-pyinstaller --noconfirm --clean --windowed --name SmithPilot --icon assets\app_icons\app-icon.ico --add-data "assets;assets" --collect-all pyvisa --collect-all pyvisa_py main.py
+pip install -r requirements-dev.txt
+pyinstaller --noconfirm --clean SmithPilot.spec
 ```
+
+The output is written to `dist\SmithPilot`. Tagged builds and manually
+dispatched builds also produce a downloadable artifact through GitHub Actions.
 
 ## E5071C LAN Connection
 
@@ -106,24 +133,32 @@ pyinstaller --noconfirm --clean --windowed --name SmithPilot --icon assets\app_i
 3. Enter the IP address in SmithPilot.
 4. SmithPilot remembers the last non-empty IP address and restores it on the
    next launch.
-5. SmithPilot builds the default VISA resource:
+5. SmithPilot builds the default VISA resource for the E5071C SCPI socket:
 
 ```text
-TCPIP0::<IP>::inst0::INSTR
+TCPIP0::<IP>::5025::SOCKET
 ```
 
 Example:
 
 ```text
-TCPIP0::169.254.74.22::inst0::INSTR
+TCPIP0::192.0.2.10::5025::SOCKET
 ```
 
 SmithPilot uses PyVISA-py with `ResourceManager("@py")`.
+During connection it first tries the SCPI socket resource, then automatically
+tries the alternate LAN instrument resource:
 
-## V0.2 Workflow
+```text
+TCPIP0::<IP>::inst0::INSTR
+```
+
+The application connection timeout is 10000 ms.
+
+## Workflow
 
 1. Connect to the E5071C.
-2. Open `V0.2 Setup`.
+2. Open `Setup`.
 3. Select a TX band preset or edit Start, Stop, Points, and Markers manually.
 4. Click `Configure Analyzer` to set the 3-trace PDF workflow.
 5. Open `Calibration`.
@@ -142,9 +177,16 @@ SmithPilot uses PyVISA-py with `ResourceManager("@py")`.
     at the selected extension reference plane(s), and measure Auto Port
     Extension. SmithPilot clears the E5071C Auto Port Extension Port 1/2
     selection before each measurement, then enables only the selected port(s).
-13. Open `DUT Measurement`.
-14. Complete the safety checklist, then run `Sweep + Read Markers`.
-15. Review S11/S22/S21 marker values and the basic judgement text.
+13. Open `Measurement Tools`.
+14. Click `Data -> Mem: Trace 1-3` to copy the current Trace 1-3 data into
+    memory as reference traces.
+15. Click `Display Data & Mem` to show both data and memory traces for Trace
+    1-3.
+16. Enter a screen capture file name, choose the VNA folder and PC folder, and
+    click `Capture Screen`. SmithPilot first stores the image on the E5071C
+    with `:MMEM:STOR:IMAG`, then transfers that same file back to the PC with
+    `:MMEM:TRAN?`. The VNA copy is kept by default. The last non-empty VNA and
+    PC capture folders are restored on the next launch.
 
 ## Band Presets
 
@@ -169,7 +211,7 @@ The file uses one object per band:
 
 Supported units are `Hz`, `kHz`, `MHz`, and `GHz`. `markers` must be inside
 the Start/Stop span and the E5071C supports up to 10 markers. After editing the
-file while SmithPilot is open, click `Reload Presets` on the `V0.2 Setup` page.
+file while SmithPilot is open, click `Reload Presets` on the `Setup` page.
 If the file is missing, SmithPilot uses the built-in default presets. If the
 file is invalid, SmithPilot keeps running with the built-in defaults and shows
 a warning in the UI/log.
@@ -186,7 +228,7 @@ V0.1:
 - Sweep Points
 - Single Sweep support commands
 
-V0.2 adds controlled driver methods for mechanical calibration, ECal, port
+SmithPilot adds controlled driver methods for mechanical calibration, ECal, port
 extension, and Save/Recall. These methods validate inputs and are only called
 by explicit UI buttons. Arbitrary console writes such as `:MMEM:STOR` or
 `:SENS1:CORR:COLL:ECAL:SOLT2` remain blocked.
@@ -199,7 +241,7 @@ the USB ECal module is selected and connected between VNA Port 1 and Port 2.
 
 Use `Use Mock Instrument` when no real E5071C is connected. Mock mode is
 clearly labeled in the UI and log and does not open a VISA resource. It supports
-the V0.2 workflow enough to validate UI flow and command sequencing.
+the workflow enough to validate UI flow and command sequencing.
 
 Mock identity:
 
@@ -212,16 +254,23 @@ Firmware = MOCK
 
 ## Tests
 
-Run the current regression suite:
+Install development dependencies and run the same checks used by CI:
 
 ```powershell
+pip install -r requirements-dev.txt
+python -m ruff check .
 python -m unittest discover -s tests
+python -m compileall -q app instrument tests main.py
+python -m pip_audit -r requirements.txt
 ```
 
 The tests do not perform real mechanical calibration or ECal. Hardware
 validation should start with read-only checks such as `*IDN?` and `SYST:ERR?`,
 then proceed to calibration only when the operator is ready with the standards
 or ECal module.
+
+See [Hardware Validation](docs/HARDWARE_VALIDATION.md) for validation levels
+and the safety checklist.
 
 ## Common Errors
 
@@ -243,16 +292,22 @@ Check:
 
 - The IP address is correct.
 - PC and E5071C are on the same network.
-- The resource string matches `TCPIP0::<IP>::inst0::INSTR`.
+- The E5071C LAN remote-control service is enabled.
+- SmithPilot will try both `TCPIP0::<IP>::5025::SOCKET` and
+  `TCPIP0::<IP>::inst0::INSTR`.
 
 ### Timeout
 
-The instrument did not answer before the 5000 ms timeout.
+The instrument did not answer before the 10000 ms timeout.
 
 Check:
 
 - LAN cable and switch/direct connection.
 - Instrument LAN settings.
+- For `TCPIP0::<IP>::5025::SOCKET`, confirm the analyzer answers SCPI on TCP
+  port 5025.
+- For `TCPIP0::<IP>::inst0::INSTR`, confirm the analyzer LAN/VXI-11 service is
+  enabled.
 - Whether another program is holding the instrument session.
 - Whether the SCPI command is valid for the current analyzer state.
 
@@ -269,6 +324,15 @@ Check:
 ## Notes
 
 - Single Sweep uses SCPI trigger/initiate commands and waits for `*OPC?`.
-- V0.2 calibration and port extension commands also wait for operation complete
+- Calibration and port extension commands also wait for operation complete
   where the E5071C reports completion.
-- See `docs/v0.2_prd.md` for the implementation scope and out-of-scope list.
+- See `docs/workflow_prd.md` for the implementation scope and out-of-scope list.
+
+## Contributing and Security
+
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before
+opening a pull request. Report vulnerabilities privately as described in
+[SECURITY.md](SECURITY.md), not through a public issue.
+
+Release history is maintained in [CHANGELOG.md](CHANGELOG.md). SmithPilot is
+available under the [MIT License](LICENSE).
