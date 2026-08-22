@@ -8,6 +8,7 @@ All notable changes to SmithPilot are documented here. This project follows
 ### Added
 
 - Open-source project policies, contribution guidance, and GitHub automation.
+- Simplified Chinese README with language navigation from the English README.
 
 ## [0.4.0] - 2026-08-21
 
