@@ -2,6 +2,10 @@
   <img src="assets/app_icons/app-icon-128.png" width="96" alt="SmithPilot logo">
 </p>
 
+<p align="center">
+  <strong>English</strong> | <a href="README.zh-CN.md">简体中文</a>
+</p>
+
 # SmithPilot
 
 [![CI](https://github.com/TomatoET/SmithPilot/actions/workflows/ci.yml/badge.svg)](https://github.com/TomatoET/SmithPilot/actions/workflows/ci.yml)
@@ -55,6 +59,7 @@ SmithPilot/
 |-- requirements-dev.txt
 |-- SmithPilot.spec
 |-- README.md
+|-- README.zh-CN.md
 |-- LICENSE
 |-- assets/
 |   |-- app_icons/
@@ -76,6 +81,7 @@ SmithPilot/
 |   `-- e5071c.py
 |-- tests/
 |   |-- test_e5071c_v02_scpi.py
+|   |-- test_main.py
 |   |-- test_main_window_settings.py
 |   `-- test_vna_workflow.py
 `-- utils/
